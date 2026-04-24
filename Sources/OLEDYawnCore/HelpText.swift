@@ -3,6 +3,8 @@ import Foundation
 public enum HelpTopic: String {
     case quick
     case sleep
+    case wake
+    case toggle
     case vcp
     case select
     case doctor
@@ -16,6 +18,10 @@ public func helpText(program: String, topic: String? = nil) -> String {
         return quickHelp(program: program)
     case "sleep":
         return sleepHelp(program: program)
+    case "wake":
+        return wakeHelp(program: program)
+    case "toggle":
+        return toggleHelp(program: program)
     case "vcp", "advanced":
         return vcpHelp(program: program)
     case "select", "selection", "display":
@@ -33,6 +39,8 @@ public func helpText(program: String, topic: String? = nil) -> String {
             Available topics:
               quick
               sleep
+              wake
+              toggle
               select
               doctor
               vcp
@@ -51,12 +59,17 @@ private func quickHelp(program: String) -> String {
       \(program) list              Show online displays
       \(program) sleep             Pick a display interactively
       \(program) sleep 1           Sleep display 1 from the list
+      \(program) sleep 1 --yes     Sleep display 1 without asking for confirmation
+      \(program) wake 1 --yes      Wake display 1 without asking for confirmation
+      \(program) toggle 1          Read power mode, then sleep or wake display 1
       \(program) sleep 1 --dry-run Resolve display and IOAVService without writing DDC
       \(program) sleep AW3225QF    Sleep the matching display name
       \(program) doctor            Show display and IOAVService diagnostics
 
     More help:
       \(program) help sleep
+      \(program) help wake
+      \(program) help toggle
       \(program) help select
       \(program) help doctor
       \(program) help vcp
@@ -80,6 +93,46 @@ private func sleepHelp(program: String) -> String {
 
     Use --yes to skip the confirmation prompt.
     Use --dry-run to resolve the target without sending a DDC write.
+    """
+}
+
+private func wakeHelp(program: String) -> String {
+    """
+    Wake one display:
+      \(program) wake [display] [--yes] [--dry-run]
+
+    If display is omitted, OLED Yawn shows a numbered list and asks you to choose.
+    Wake writes value 1 to VCP 0xD6.
+
+    Examples:
+      \(program) wake
+      \(program) wake 1
+      \(program) wake AW3225QF --yes
+
+    Use --yes to skip the confirmation prompt.
+    Use --dry-run to resolve the target without sending a DDC write.
+
+    Some monitors stop accepting DDC commands while asleep, so wake depends on
+    the display, input path, dock or adapter, and firmware.
+    """
+}
+
+private func toggleHelp(program: String) -> String {
+    """
+    Toggle one display:
+      \(program) toggle [display] [--yes] [--dry-run]
+
+    Toggle reads VCP 0xD6. If the display reports on, OLED Yawn sleeps it.
+    Otherwise, OLED Yawn wakes it. If the read fails, toggle exits without
+    guessing; use sleep or wake explicitly.
+
+    Examples:
+      \(program) toggle
+      \(program) toggle 1
+      \(program) toggle AW3225QF --yes
+
+    Use --yes to skip the confirmation prompt after the current mode is read.
+    Use --dry-run to resolve the target without sending a DDC read or write.
     """
 }
 
@@ -145,6 +198,8 @@ private func troubleshootingHelp(program: String) -> String {
       \(program) list --verbose
       \(program) doctor
       \(program) sleep <display> --dry-run
+      \(program) wake <display> --dry-run
+      \(program) toggle <display> --dry-run
 
     If a display is listed but sleep fails, check that the monitor has DDC/CI enabled
     in its on-screen menu. Some inputs, hubs, docks, adapters, and macOS updates can

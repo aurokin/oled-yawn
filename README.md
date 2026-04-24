@@ -34,6 +34,24 @@ Sleep display 1 from the list:
 ./oled-yawn sleep 1
 ```
 
+Sleep display 1 without a confirmation prompt:
+
+```sh
+./oled-yawn sleep 1 --yes
+```
+
+Wake display 1:
+
+```sh
+./oled-yawn wake 1 --yes
+```
+
+Toggle display 1 based on its current power mode:
+
+```sh
+./oled-yawn toggle 1
+```
+
 Check targeting without sleeping anything:
 
 ```sh
@@ -79,6 +97,16 @@ The sleep command writes VCP `0xD6` with value `4` by default:
 ./oled-yawn sleep AW3225QF 4
 ```
 
+The wake command writes VCP `0xD6` with value `1`:
+
+```sh
+./oled-yawn wake AW3225QF --yes
+```
+
+The toggle command reads VCP `0xD6` first. If the display reports `1`/on,
+OLED Yawn sends sleep. Otherwise it sends wake. If the read fails, toggle exits
+without guessing; use `sleep` or `wake` explicitly.
+
 You can write another VCP value:
 
 ```sh
@@ -114,11 +142,17 @@ If a display is listed but sleep fails, check that DDC/CI is enabled in the
 monitor's on-screen menu. Some inputs, hubs, docks, adapters, and macOS updates
 can block or change DDC access.
 
+Wake and toggle also depend on the monitor remaining reachable over DDC while it
+is asleep. Some displays stop accepting DDC commands until woken by another
+signal.
+
 Use diagnostics before sending a real sleep command:
 
 ```sh
 ./oled-yawn doctor
 ./oled-yawn sleep 1 --dry-run
+./oled-yawn wake 1 --dry-run
+./oled-yawn toggle 1 --dry-run
 ```
 
 OLED Yawn uses private macOS CoreDisplay and IOAVService APIs. That keeps the

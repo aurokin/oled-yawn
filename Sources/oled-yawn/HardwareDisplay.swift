@@ -19,6 +19,15 @@ func IOAVServiceWriteI2C(
     _ inputBufferSize: UInt32
 ) -> IOReturn
 
+@_silgen_name("IOAVServiceReadI2C")
+func IOAVServiceReadI2C(
+    _ service: AnyObject,
+    _ chipAddress: UInt32,
+    _ offset: UInt32,
+    _ outputBuffer: UnsafeMutableRawPointer,
+    _ outputBufferSize: UInt32
+) -> IOReturn
+
 struct HardwareDisplay {
     let id: CGDirectDisplayID
     let summary: DisplaySummary
@@ -28,6 +37,12 @@ struct HardwareDisplay {
 struct AVServiceResolution {
     let service: AnyObject
     let strategy: String
+}
+
+enum DDCReadOutcome {
+    case value(UInt16)
+    case ioError(IOReturn)
+    case invalidResponse([UInt8])
 }
 
 enum Hardware {
@@ -116,6 +131,50 @@ enum Hardware {
         return ret
     }
 
+    static func ddcRead(_ av: AnyObject, vcp: UInt8) -> DDCReadOutcome {
+        let inputAddress: UInt8 = 0x51
+        var request = [UInt8](repeating: 0, count: 4)
+        request[0] = 0x82
+        request[1] = 0x01
+        request[2] = vcp
+        request[3] = 0x6E ^ inputAddress ^ request[0] ^ request[1] ^ request[2]
+
+        let writeRet = request.withUnsafeMutableBufferPointer { buffer in
+            IOAVServiceWriteI2C(
+                av,
+                0x37,
+                UInt32(inputAddress),
+                UnsafeMutableRawPointer(buffer.baseAddress!),
+                UInt32(buffer.count)
+            )
+        }
+        guard writeRet == KERN_SUCCESS else {
+            return .ioError(writeRet)
+        }
+
+        usleep(40_000)
+
+        var response = [UInt8](repeating: 0, count: 12)
+        let readRet = response.withUnsafeMutableBufferPointer { buffer in
+            IOAVServiceReadI2C(
+                av,
+                0x37,
+                UInt32(inputAddress),
+                UnsafeMutableRawPointer(buffer.baseAddress!),
+                UInt32(buffer.count)
+            )
+        }
+        guard readRet == KERN_SUCCESS else {
+            return .ioError(readRet)
+        }
+
+        guard let currentValue = currentVCPValue(from: response, vcp: vcp) else {
+            return .invalidResponse(response)
+        }
+
+        return .value(currentValue)
+    }
+
     private static func productName(for ioLocation: String) -> String {
         let adapter = IORegistryEntryCopyFromPath(kIOMainPortDefault, ioLocation as CFString)
         guard adapter != MACH_PORT_NULL else {
@@ -139,6 +198,22 @@ enum Hardware {
         }
 
         return "Unknown Display"
+    }
+
+    private static func currentVCPValue(from response: [UInt8], vcp: UInt8) -> UInt16? {
+        for index in response.indices {
+            guard response[index] == 0x02,
+                response.indices.contains(index + 7),
+                response[index + 1] == 0x00,
+                response[index + 2] == vcp
+            else {
+                continue
+            }
+
+            return UInt16(response[index + 6]) << 8 | UInt16(response[index + 7])
+        }
+
+        return nil
     }
 
     private static func firstExternalAVService(startingAt rootService: io_service_t) -> AnyObject? {
